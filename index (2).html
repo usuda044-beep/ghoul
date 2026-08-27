@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>e 東京喰種 - 入賞時手落ち＆リゼぷちゅん追加版</title>
+<style>
+  :root {
+    --bg-color: #050203;
+    --panel-bg: rgba(20, 8, 12, 0.95);
+    --accent-red: #ff1a30;
+    --accent-gold: #ffcc00;
+  }
+  html, body {
+    height: 100%;
+  }
+  body {
+    font-family: "Hiragino Sans", "Yu Gothic", Meiryo, sans-serif;
+    background: radial-gradient(circle at center, #1a080c 0%, #080204 70%, #000 100%);
+    color: #e6dedf;
+    margin: 0;
+    height: 100vh;
+    height: 100dvh;          /* スマホのアドレスバーを除いた実高さ */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 8px;
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+    overflow: hidden;         /* スクロールさせない */
+  }
+  .wrap {
+    display: flex;
+    flex-direction: column;   /* 盤面とボタンを縦積み */
+    gap: 10px;
+    align-items: center;
+    justify-content: center;
+    max-height: 100%;
+    /* 盤面(450x740)＋ボタン＋余白を、画面の高さに収まるよう全体を縮小する。
+       高さ基準・幅基準の小さいほうに合わせる */
+    --scale: min(1, calc((100vh - 90px) / 740), calc((100vw - 24px) / 450));
+    --scale: min(1, calc((100dvh - 90px) / 740), calc((100vw - 24px) / 450));
+  }
+  .pachinko-frame {
+    position: relative;
+    width: 450px;
+    height: 740px;
+    flex-shrink: 0;
+    transform: scale(var(--scale));
+    transform-origin: center top;
+    /* 縮小後の実寸ぶんだけ下の余白を詰める（scaleは見た目だけ縮むため） */
+    margin-bottom: calc((var(--scale) - 1) * 740px);
+    background:
+      radial-gradient(ellipse 60% 40% at 50% 18%, rgba(255,40,70,0.18) 0%, transparent 55%),
+      radial-gradient(ellipse 80% 60% at 50% 75%, rgba(120,10,30,0.25) 0%, transparent 60%),
+      linear-gradient(160deg, #240d14 0%, #0c0406 45%, #180810 100%);
+    border-radius: 24px;
+    box-shadow:
+      inset 0 0 3px rgba(255,120,140,0.4),
+      inset 0 0 40px rgba(255, 30, 60, 0.15),
+      inset 0 4px 20px rgba(0,0,0,0.8),
+      0 0 60px rgba(0, 0, 0, 0.95),
+      0 0 40px rgba(220, 20, 50, 0.3);
+    overflow: hidden;
+    padding: 0;
+  }
+  /* 外周の金属ベゼル */
+  .pachinko-frame::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 24px;
+    padding: 6px;
+    background: linear-gradient(145deg, #7a2030 0%, #2a0a12 25%, #4a121e 50%, #1a0508 75%, #6a1a28 100%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    z-index: 30;
+    pointer-events: none;
+  }
+  /* 盤面ガラスの光沢（上部のハイライト） */
+  .pachinko-frame::after {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 45%;
+    border-radius: 24px 24px 50% 50%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.06) 0%, transparent 100%);
+    z-index: 28;
+    pointer-events: none;
+  }
+  canvas#board {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+    cursor: pointer;
+  }
+  .machine-bg-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  /* 喰MAXハンド役物 */
+  .hand-gimmick {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 25;
+    pointer-events: none;
+    transform-origin: 360px 50px;
+    will-change: transform;
+  }
+  .hand-gimmick.idle {
+    transform: translate(110px, -45px) rotate(-18deg) scale(0.65);
+    transition: transform 1.2s cubic-bezier(0.25, 1, 0.5, 1);
+  }
+  .hand-gimmick.drop {
+    transform: translate(-35px, 125px) rotate(12deg) scale(1.15);
+    transition: transform 0.12s cubic-bezier(0.05, 0.9, 0.1, 1.2);
+    filter: drop-shadow(0 0 30px rgba(255, 20, 50, 0.95));
+  }
+
+  .side { width: 230px; flex-shrink: 0; }
+  .panel {
+    background: var(--panel-bg);
+    border: 1px solid #6e1c2a;
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+  }
+  .label { color: #a86c77; font-size: 11px; margin: 0 0 2px; }
+  .value { font-size: 24px; margin: 0; font-weight: bold; }
+  h1 { font-size: 20px; margin: 0 0 2px; color: var(--accent-red); }
+  .sub { font-size: 10px; color: #8f505c; margin: 0 0 10px; }
+  button {
+    width: 100%;
+    padding: 14px;
+    font-size: 15px;
+    font-weight: bold;
+    background: linear-gradient(#d91e32, #870b18);
+    color: #fff;
+    border: 1px solid #ff4d60;
+    border-radius: 8px;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(220,20,40,0.5);
+    touch-action: manipulation;   /* ダブルタップ拡大を防ぐ */
+  }
+  button:active { transform: translateY(2px); }
+
+  /* ══ スマホ・縦長画面用レイアウト ══ */
+  @media (max-aspect-ratio: 3/4), (max-width: 760px) {
+    .wrap {
+      flex-direction: column;
+      gap: 6px;
+      justify-content: flex-start;
+      /* 盤面は、画面の高さからボタン領域(約84px)を引いた残りに収める */
+      --scale: min(1, calc((100dvh - 96px) / 740), calc((100vw - 16px) / 450));
+    }
+    /* 情報パネルは省スペースに横並び1行だけ */
+    .side {
+      width: auto;
+      max-width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      order: 2;
+    }
+    .side h1, .side .sub, .side .status-box { display: none; }
+    .side .panel {
+      margin: 0;
+      padding: 4px 10px;
+      text-align: center;
+    }
+    .side .panel .label { font-size: 9px; }
+    .side .panel .value { font-size: 16px; }
+    /* 発射ボタンを画面最下部に固定して、常に指の届く位置に */
+    #btnLaunch {
+      position: fixed;
+      left: 50%;
+      bottom: 10px;
+      transform: translateX(-50%);
+      width: min(90vw, 360px);
+      padding: 16px;
+      font-size: 16px;
+      z-index: 100;
+      order: 3;
+    }
+    #btnLaunch:active { transform: translateX(-50%) translateY(2px); }
+    /* 固定ボタンのぶん、下に余白を作る */
+    body { padding-bottom: 70px; }
+  }
+  .status-box {
+    margin-top: 10px;
+    padding: 8px;
+    background: #120407;
+    border: 1px solid #ff263b;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #ffb0b8;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="pachinko-frame" id="frame">
+    <!-- 実機背景 -->
+    <svg class="machine-bg-svg" viewBox="0 0 450 740" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="eyeGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#ffffff"/>
+          <stop offset="25%" stop-color="#ff3050"/>
+          <stop offset="60%" stop-color="#c8102a"/>
+          <stop offset="100%" stop-color="#3a0008"/>
+        </radialGradient>
+        <radialGradient id="auraRed" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="rgba(255, 30, 55, 0.5)"/>
+          <stop offset="55%" stop-color="rgba(180, 15, 40, 0.15)"/>
+          <stop offset="100%" stop-color="transparent"/>
+        </radialGradient>
+        <linearGradient id="lampGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#ff3a54"/>
+          <stop offset="50%" stop-color="#7a0a16"/>
+          <stop offset="100%" stop-color="#ff3a54"/>
+        </linearGradient>
+        <radialGradient id="higanbana" cx="50%" cy="30%" r="70%">
+          <stop offset="0%" stop-color="#ff8090"/>
+          <stop offset="45%" stop-color="#e0142e"/>
+          <stop offset="100%" stop-color="#5a0410"/>
+        </radialGradient>
+        <linearGradient id="hairGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#ffffff"/>
+          <stop offset="100%" stop-color="#d8d2ce"/>
+        </linearGradient>
+        <linearGradient id="faceGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#efe8e3"/>
+          <stop offset="100%" stop-color="#c9beb6"/>
+        </linearGradient>
+        <linearGradient id="lcdFrameGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#ff2a44"/>
+          <stop offset="30%" stop-color="#8a0c1a"/>
+          <stop offset="50%" stop-color="#ffcc44"/>
+          <stop offset="70%" stop-color="#8a0c1a"/>
+          <stop offset="100%" stop-color="#ff2a44"/>
+        </linearGradient>
+        <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="4" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <radialGradient id="vignette" cx="50%" cy="45%" r="75%">
+          <stop offset="60%" stop-color="transparent"/>
+          <stop offset="100%" stop-color="rgba(0,0,0,0.55)"/>
+        </radialGradient>
+      </defs>
+
+      <!-- 上部の血しぶき風テクスチャ -->
+      <g opacity="0.35" fill="#8a0a18">
+        <circle cx="70" cy="60" r="3"/><circle cx="90" cy="48" r="1.6"/>
+        <circle cx="380" cy="70" r="2.6"/><circle cx="360" cy="52" r="1.4"/>
+        <circle cx="130" cy="40" r="1.8"/><circle cx="320" cy="42" r="2"/>
+        <path d="M60 90 q6 10 2 20 q-8-6-2-20" opacity="0.5"/>
+        <path d="M395 100 q-6 12 -1 22 q9-7 1-22" opacity="0.5"/>
+      </g>
+
+      <!-- タイトルロゴ帯 -->
+      <text x="225" y="26" font-size="12" fill="#ff3048" text-anchor="middle" font-weight="900" letter-spacing="3" filter="url(#softGlow)" opacity="0.8">TOKYO GHOUL</text>
+
+      <!-- 左：東京喰種ランプ（縦長発光体・目盛り付き） -->
+      <g id="ghoulLamp">
+        <rect x="40" y="240" width="22" height="170" rx="11" fill="#0d0407" stroke="#6a1622" stroke-width="2"/>
+        <rect x="45" y="246" width="12" height="158" rx="6" fill="url(#lampGrad)" opacity="0.9" filter="url(#softGlow)"/>
+        <g stroke="#1a0508" stroke-width="1.5" opacity="0.6">
+          <line x1="45" y1="290" x2="57" y2="290"/>
+          <line x1="45" y1="325" x2="57" y2="325"/>
+          <line x1="45" y1="360" x2="57" y2="360"/>
+        </g>
+      </g>
+
+      <!-- ══ 上部役物（実機画像に寄せた構成）══ -->
+      <!-- 背後の赤いオーラ -->
+      <ellipse cx="225" cy="120" rx="150" ry="120" fill="url(#auraRed)"/>
+
+      <!-- 上に乗る小さい顔2つ -->
+      <g id="subChars">
+        <!-- 左：隻眼の白マスク（仮面） -->
+        <g transform="translate(162, 56)">
+          <ellipse cx="0" cy="0" rx="23" ry="26" fill="#e8e2dd"/>
+          <path d="M-23,-4 Q0,-14 23,-4 L23,5 Q0,-5 -23,5 Z" fill="#1a1216"/>
+          <path d="M-14,3 L-9,10 L-3,3 L3,10 L8,3 L13,10 L16,3" fill="none" stroke="#1a1216" stroke-width="2.2"/>
+          <ellipse cx="8" cy="-5" rx="4.5" ry="5.5" fill="#c8102a" filter="url(#softGlow)"/>
+          <ellipse cx="-8" cy="-5" rx="3.5" ry="4.5" fill="#2a1418"/>
+        </g>
+        <!-- 右：赤髪のキャラ -->
+        <g transform="translate(288, 60)">
+          <path d="M-21,-7 Q-25,-27 -7,-30 Q0,-34 9,-30 Q27,-25 21,-5 Q25,9 12,18 Q0,25 -12,18 Q-25,7 -21,-7 Z" fill="#b23020"/>
+          <ellipse cx="0" cy="3" rx="17" ry="20" fill="#efe4dc"/>
+          <path d="M-19,-5 Q-12,-21 0,-21 Q12,-21 19,-5 Q9,-12 0,-12 Q-9,-12 -19,-5 Z" fill="#c23a26"/>
+          <ellipse cx="-7" cy="2" rx="3" ry="4" fill="#2a1a1a"/>
+          <ellipse cx="8" cy="2" rx="3" ry="4" fill="#2a1a1a"/>
+          <path d="M-5,12 Q0,15 5,12" fill="none" stroke="#a07068" stroke-width="1.2"/>
+        </g>
+      </g>
+
+      <!-- 中央：大きな金木の顔 -->
+      <g id="kanekiFace">
+        <!-- 量感のある白髪（もしゃっとした毛束の集合） -->
+        <path d="M 168 118
+                 Q 158 70 178 52 Q 172 40 190 38
+                 Q 186 26 206 30 Q 210 18 225 24
+                 Q 240 18 244 30 Q 264 26 260 38
+                 Q 278 40 272 52 Q 292 70 282 118
+                 Q 270 96 260 112 Q 254 92 244 108
+                 Q 236 88 225 106 Q 214 88 206 108
+                 Q 196 92 190 112 Q 180 96 168 118 Z"
+              fill="url(#hairGrad)" stroke="#c8c0ba" stroke-width="0.5"/>
+        <!-- 毛束の陰影 -->
+        <g stroke="#cfc7c1" stroke-width="1" opacity="0.6" fill="none">
+          <path d="M195,60 Q192,84 198,104"/>
+          <path d="M225,52 Q224,80 225,104"/>
+          <path d="M255,60 Q258,84 252,104"/>
+        </g>
+
+        <!-- 顔の輪郭（面長・下ぶくれ気味） -->
+        <path d="M 186 104
+                 Q 184 150 200 176 Q 212 194 225 196
+                 Q 238 194 250 176 Q 266 150 264 104
+                 Q 225 92 186 104 Z" fill="url(#faceGrad)"/>
+
+        <!-- 眉 -->
+        <path d="M 198 120 Q 208 116 216 120" fill="none" stroke="#9a8f88" stroke-width="1.6"/>
+        <path d="M 234 120 Q 242 116 252 120" fill="none" stroke="#9a8f88" stroke-width="1.6"/>
+
+        <!-- 左目（向かって左＝人間の目・虚ろ） -->
+        <g>
+          <path d="M 198 132 Q 208 127 217 132 Q 208 138 198 132 Z" fill="#f0ebe6" stroke="#7a6f68" stroke-width="1"/>
+          <circle cx="208" cy="133" r="3.6" fill="#5a4a44"/>
+          <circle cx="208" cy="133" r="1.6" fill="#1a1210"/>
+        </g>
+        <!-- 右目（向かって右＝赫眼・赤黒く発光する隻眼） -->
+        <g>
+          <path d="M 233 132 Q 243 126 253 132 Q 243 139 233 132 Z" fill="#1a0206"/>
+          <circle cx="243" cy="132" r="5" fill="url(#eyeGlow)" filter="url(#softGlow)"/>
+          <circle cx="243" cy="132" r="1.8" fill="#2a0004"/>
+        </g>
+        <!-- 赫眼の下に伸びる赤い血管状の筋 -->
+        <g stroke="#c8102a" stroke-width="1.2" fill="none" opacity="0.85" filter="url(#softGlow)">
+          <path d="M 243 138 Q 246 150 244 164"/>
+          <path d="M 243 138 Q 240 148 236 158"/>
+          <path d="M 248 140 Q 252 150 250 160"/>
+        </g>
+
+        <!-- 鼻 -->
+        <path d="M 225 138 L 222 156 Q 225 159 228 156 Z" fill="none" stroke="#b0a49c" stroke-width="1.2"/>
+        <!-- 口（真一文字・無表情） -->
+        <path d="M 212 172 Q 225 175 238 172" fill="none" stroke="#8a7a72" stroke-width="1.8"/>
+
+        <!-- 首・肩・黒い服 -->
+        <path d="M 205 194 L 245 194 L 262 210 L 188 210 Z" fill="#e0d8d2"/>
+        <path d="M 175 210 L 275 210 L 285 232 L 165 232 Z" fill="#0d0a10"/>
+      </g>
+
+      <!-- 左：縦書き「東京喰種」ロゴ帯 -->
+      <g id="verticalLogo">
+        <rect x="66" y="96" width="32" height="120" rx="4" fill="#0a0305" stroke="url(#lcdFrameGrad)" stroke-width="2"/>
+        <text x="82" y="120" font-size="19" fill="#e8e0e2" text-anchor="middle" font-weight="900">東</text>
+        <text x="82" y="145" font-size="19" fill="#e8e0e2" text-anchor="middle" font-weight="900">京</text>
+        <text x="82" y="172" font-size="19" fill="#ff2a44" text-anchor="middle" font-weight="900" filter="url(#softGlow)">喰</text>
+        <text x="82" y="199" font-size="19" fill="#ff2a44" text-anchor="middle" font-weight="900" filter="url(#softGlow)">種</text>
+      </g>
+
+      <!-- 右上：彼岸花役物（大型・放射状） -->
+      <g id="higanbanaYakumono" transform="translate(370, 175)" filter="url(#softGlow)">
+        <g fill="url(#higanbana)" stroke="#ff9aa8" stroke-width="0.6">
+          <path d="M0,0 Q-3,-30 -10,-42 Q-2,-24 0,0"/>
+          <path d="M0,0 Q3,-30 10,-42 Q2,-24 0,0"/>
+          <path d="M0,0 Q-16,-24 -30,-30 Q-14,-14 0,0"/>
+          <path d="M0,0 Q16,-24 30,-30 Q14,-14 0,0"/>
+          <path d="M0,0 Q-24,-8 -38,-6 Q-20,-4 0,0"/>
+          <path d="M0,0 Q24,-8 38,-6 Q20,-4 0,0"/>
+          <path d="M0,0 Q-12,-28 -22,-38 Q-8,-20 0,0"/>
+          <path d="M0,0 Q12,-28 22,-38 Q8,-20 0,0"/>
+          <path d="M0,0 Q-20,-18 -34,-20 Q-16,-10 0,0"/>
+          <path d="M0,0 Q20,-18 34,-20 Q16,-10 0,0"/>
+        </g>
+        <g stroke="#ffd24a" stroke-width="1.1" fill="none" opacity="0.9">
+          <path d="M0,0 Q-12,-34 -18,-50"/>
+          <path d="M0,0 Q12,-34 18,-50"/>
+          <path d="M0,0 Q-5,-36 -5,-54"/>
+          <path d="M0,0 Q5,-36 5,-54"/>
+          <path d="M0,0 Q0,-38 0,-56"/>
+        </g>
+        <g fill="#ffe27a">
+          <circle cx="-18" cy="-50" r="2"/><circle cx="18" cy="-50" r="2"/>
+          <circle cx="-5" cy="-54" r="2"/><circle cx="5" cy="-54" r="2"/>
+          <circle cx="0" cy="-56" r="2"/>
+        </g>
+        <circle cx="0" cy="0" r="5" fill="#ffd24a"/>
+      </g>
+
+      <!-- 下部：アタッカー（大入賞口・立体的） -->
+      <g id="attacker">
+        <rect x="145" y="610" width="160" height="30" rx="5" fill="#0a0508" stroke="url(#lcdFrameGrad)" stroke-width="2.5"/>
+        <rect x="151" y="615" width="148" height="6" rx="3" fill="#3a0e16"/>
+        <rect x="151" y="624" width="148" height="10" rx="2" fill="#160609"/>
+        <text x="225" y="633" font-size="10" fill="#c88a94" text-anchor="middle" letter-spacing="5" font-weight="bold">ATTACKER</text>
+      </g>
+
+      <!-- 全体のビネット（周辺減光で立体感） -->
+      <rect x="0" y="0" width="450" height="740" fill="url(#vignette)" pointer-events="none"/>
+    </svg>
+
+    <!-- 喰MAXハンド役物 -->
+    <div class="hand-gimmick idle" id="handGimmick">
+      <svg width="240" height="260" viewBox="0 0 240 260" xmlns="http://www.w3.org/2000/svg">
+        <rect x="85" y="0" width="70" height="110" fill="#120608" stroke="#8a1826" stroke-width="4" rx="6"/>
+        <path d="M 50 90 L 190 90 L 205 150 L 120 185 L 35 150 Z" fill="#3a1820" stroke="#ff263b" stroke-width="4"/>
+        <circle cx="120" cy="140" r="20" fill="#ff1a33"/>
+        <circle cx="120" cy="140" r="8" fill="#ffffff"/>
+      </svg>
+    </div>
+
+    <canvas id="board" width="450" height="740"></canvas>
+  </div>
+
+  <div class="side">
+    <h1>e 東京喰種</h1>
+    <p class="sub">手落ち＆リゼぷちゅんW大当り搭載</p>
+
+    <div class="panel">
+      <p class="label">打ち込み数</p>
+      <p class="value" id="shot">0</p>
+    </div>
+    <div class="panel">
+      <p class="label">へそ入賞</p>
+      <p class="value" id="hit" style="color:var(--accent-red)">0</p>
+    </div>
+    <div class="panel">
+      <p class="label">大当り</p>
+      <p class="value" id="win" style="color:var(--accent-gold)">0</p>
+    </div>
+
+    <button id="btnLaunch">玉を発射（長押し連射）</button>
+
+    <div class="status-box" id="statusBox">
+      【待機中】ヘソ入賞で変動開始
+    </div>
+  </div>
+</div>
+
+<script>
+const cv = document.getElementById("board");
+const ctx = cv.getContext("2d");
+const W = 450, H = 740;
+
+const GRAV = 0.165, REST = 0.48, FRICT = 0.998, BALL_R = 5.8, PIN_R = 3.5;
+
+// ひし形液晶座標（球の通り道と重ならないよう、上方に配置し小型化）
+const lcdDiamond = [
+  { x: W / 2, y: 150 },
+  { x: W / 2 + 110, y: 240 },
+  { x: W / 2, y: 330 },
+  { x: W / 2 - 110, y: 240 }
+];
+
+let shakeTime = 0, shakeIntensity = 0;
+function triggerShake(intensity = 10, time = 18) {
+  shakeIntensity = intensity;
+  shakeTime = time;
+}
+
+// 角丸長方形のパスを引くヘルパー
+function roundRect(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+
+function pointInPoly(pt, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i].x, yi = poly[i].y;
+    const xj = poly[j].x, yj = poly[j].y;
+    const intersect = ((yi > pt.y) !== (yj > pt.y)) &&
+        (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+// 釘＆レール構築
+const outerRail = [], innerRail = [], pins = [];
+const guides = [];   // 道釘などの「線」で表現するガイド（見た目と当たり判定を兼ねる）
+(function initBoard() {
+  // 外レール：左壁を上がり、左上のカーブを通って天井の頂点(中央やや左)まで。
+  // 頂点で切れ目を作り、そこから玉が盤面中央へこぼれる（実機のワープ/ステージ入口のイメージ）
+  for (let y = H; y >= 135; y -= 15) outerRail.push({ x: 12, y });
+  for (let a = Math.PI; a <= Math.PI * 1.5; a += 0.08) outerRail.push({ x: 135 + 123 * Math.cos(a), y: 135 + 123 * Math.sin(a) });
+  // 天井は頂点(x=210)で止める。そこから右へは伸ばさない＝玉が右へ流れない
+  for (let x = 135; x <= 205; x += 15) outerRail.push({ x, y: 12 });
+  // 頂点から下向きの「返し壁」。飛んできた玉をここで受けて中央へ落とす
+  outerRail.push({ x: 205, y: 12 });
+  outerRail.push({ x: 214, y: 44 });
+  outerRail.push({ x: 210, y: 82 });
+  outerRail.push({ x: 198, y: 116 });
+  outerRail.push({ x: 182, y: 142 });
+
+  // 内レール：外レールの内側。こちらは頂点手前(x=175)で終わり、玉を中央へ落とす切れ目になる
+  for (let y = H; y >= 135; y -= 15) innerRail.push({ x: 30, y });
+  for (let a = Math.PI; a <= Math.PI * 1.30; a += 0.08) innerRail.push({ x: 135 + 105 * Math.cos(a), y: 135 + 105 * Math.sin(a) });
+
+  const cx = W / 2;
+
+  // ══ 実機の標準レイアウトで釘を配置 ══
+  // 液晶は中央上(y=150〜330)。その下にヘソ。玉は左上から落ち、液晶の左脇〜下を
+  // 通って中央のヘソへ。すべて液晶の外側に置く。
+
+  const hesoX = cx, hesoY = 508;   // ヘソを下げる（漏斗の下に置く）
+
+  // ── 風車（ハカマ）：液晶の左下。落ちてきた玉をヘソ側へ振り分ける ──
+  const kazaX = 96, kazaY = 350;
+  pins.push({ x: kazaX, y: kazaY, windmill:true });
+
+  // ── 寄り釘：液晶の左脇。玉を風車へ集める ──
+  const yori = [
+    [70, 250],[92, 268],[74, 292],[96, 312],[80, 334]
+  ];
+  for (const [x,y] of yori) pins.push({ x, y });
+
+  // ── 道釘：風車からヘソ上へ。液晶の下を通る樋。本数を増やして玉をこぼさない ──
+  const road = [
+    [kazaX + 16, 356],[kazaX + 42, 366],[kazaX + 70, 374],
+    [kazaX + 98, 382],[kazaX + 124, 390],[hesoX - 24, 398]
+  ];
+  for (const [x,y] of road) pins.push({ x, y, road:true });
+  // 受け釘（樋の下側）も1本ずつ対応させて増やす
+  for (const [x,y] of road) pins.push({ x: x + 3, y: y + 18, road:true });
+
+  // ══ 漏斗（ロート）：ヘソの上を左右から囲うV字の釘列 ══
+  // 広い口で玉を受けて、ヘソへ集める。左右対称に釘を並べる。
+  const funnelTop = 412, funnelBottom = hesoY - 16;
+  const funnelHalfTop = 88;      // 上端の半幅（広い口）
+  const funnelHalfBottom = 16;   // 下端の半幅（ヘソの手前で狭まる）
+  const funnelRows = 6;
+  for (let i = 0; i <= funnelRows; i++) {
+    const t = i / funnelRows;
+    const y = funnelTop + (funnelBottom - funnelTop) * t;
+    const half = funnelHalfTop + (funnelHalfBottom - funnelHalfTop) * t;
+    pins.push({ x: hesoX - half, y, funnel:true });   // 左の斜辺
+    pins.push({ x: hesoX + half, y, funnel:true });   // 右の斜辺
+  }
+
+  // ── 命釘：ヘソ直上の左右2本（漏斗の出口） ──
+  pins.push({ x: hesoX - 12, y: hesoY - 20, life:true });
+  pins.push({ x: hesoX + 12, y: hesoY - 20, life:true });
+
+  // ── ヨロイ釘：ヘソ両脇 ──
+  pins.push({ x: hesoX - 36, y: hesoY });
+  pins.push({ x: hesoX + 36, y: hesoY });
+
+  // ── 右打ちルート（形だけ） ──
+  const migi = [
+    [370, 200],[380, 240],[386, 280],[388, 320],[384, 360],[374, 400]
+  ];
+  for (const [x,y] of migi) pins.push({ x, y, migi:true });
+  pins.push({ x: 340, y: 430, migi:true });
+  pins.push({ x: 360, y: 450, migi:true });
+
+  // ── 一般入賞口まわりの飾り釘 ──
+  pins.push({ x: 60, y: 470 });
+  pins.push({ x: 390, y: 470 });
+
+  // ══ 安全装置：液晶ダイヤの中に入った釘を自動で取り除く ══
+  for (let i = pins.length - 1; i >= 0; i--) {
+    if (pointInPoly(pins[i], lcdDiamond)) pins.splice(i, 1);
+  }
+})();
+
+const heso = { x: W / 2, y: 508, w: 32, h: 14 };
+const balls = [];
+let shot = 0, hit = 0, win = 0;
+
+function launch() {
+  balls.push({
+    x: 21, y: H - 15,
+    vx: 0,
+    // 射出力は「壁ギリギリ」。玉が左レールを上り、天井のカーブで勢いを失って
+    // 盤面上部にこぼれ、道釘を伝って落ちるくらいの強さにする
+    vy: -17.5 - Math.random() * 0.5,
+    alive: true,
+    life: 0
+  });
+  shot++;
+  document.getElementById("shot").textContent = shot;
+}
+
+// ------------------------------------
+// 【液晶演出・保留キューロジック】
+// ------------------------------------
+const SYMBOLS = ["1", "2", "3", "4", "5", "6", "7"];
+const handEl = document.getElementById("handGimmick");
+
+const queue = [];
+const lcd = {
+  phase: "IDLE",
+  timer: 0,
+  reels: [1, 2, 3],
+  currentData: null,
+  buttonPushed: false,
+  buttonScale: 1.0
+};
+
+function setStatus(txt) {
+  document.getElementById("statusBox").textContent = txt;
+}
+
+// 喰MAXハンド落下アクション
+function triggerHandDrop() {
+  handEl.classList.remove("idle");
+  handEl.classList.add("drop");
+  triggerShake(22, 28);
+  setTimeout(() => {
+    handEl.classList.remove("drop");
+    handEl.classList.add("idle");
+  }, 1200);
+}
+
+// ヘソ入賞時抽選（1/10で大当り：ヤモリバトル手落ち 50% / リゼぷちゅん 50%）
+function onHeso() {
+  hit++;
+  document.getElementById("hit").textContent = hit;
+
+  if (queue.length < 4) {
+    const isWin = Math.random() < 0.10;
+    let pattern = "FAST_MISS";
+
+    if (isWin) {
+      // 大当り時は半々で2パターンのプレミア演出へ発展
+      if (Math.random() < 0.5) {
+        pattern = "SP_BATTLE";
+        triggerHandDrop(); // 入賞時手落ち（先バレ）
+        setStatus("【先手落ち発生！】ヤモリバトル（確確）保留が入賞！");
+      } else {
+        pattern = "RIZE_FREEZE"; // 変動中突然ぷちゅん（画面暗転）
+        setStatus("【保留獲得】違和感保留（リゼの気配…）");
+      }
+    } else {
+      pattern = Math.random() < 0.85 ? "FAST_MISS" : "NORMAL_REACH";
+    }
+
+    let left = Math.floor(Math.random() * 7);
+    let right = Math.floor(Math.random() * 7);
+    let mid = Math.floor(Math.random() * 7);
+
+    if (pattern === "NORMAL_REACH") {
+      right = left;
+      while (mid === left) mid = Math.floor(Math.random() * 7);
+    } else if (pattern === "SP_BATTLE" || pattern === "RIZE_FREEZE") {
+      right = left; mid = left;
+    } else {
+      if (left === right) right = (left + 1) % 7;
+    }
+
+    queue.push({ isWin, pattern, left, mid, right });
+  }
+
+  if (lcd.phase === "IDLE") {
+    nextSequence();
+  }
+}
+
+function nextSequence() {
+  if (queue.length === 0) {
+    lcd.phase = "IDLE";
+    setStatus("【待機中】ヘソ入賞で変動開始");
+    return;
+  }
+
+  const cur = queue.shift();
+  lcd.currentData = cur;
+  lcd.timer = 0;
+
+  if (cur.pattern === "FAST_MISS") {
+    lcd.phase = "FAST_SPIN";
+    setStatus("【通常変動】");
+  } else if (cur.pattern === "NORMAL_REACH") {
+    lcd.phase = "NORMAL_REACH_SPIN";
+    setStatus("【リーチ発生】");
+  } else if (cur.pattern === "SP_BATTLE") {
+    lcd.phase = "SPIN_1";
+    setStatus("【激アツ！】手落ち保留消化・バトル発生＝確確！");
+  } else if (cur.pattern === "RIZE_FREEZE") {
+    lcd.phase = "RIZE_START";
+    setStatus("【変動開始】……！？");
+  }
+}
+
+function updateLcd(dt) {
+  if (lcd.phase === "IDLE") return;
+
+  lcd.timer += dt;
+  const cur = lcd.currentData;
+
+  // 通常・ノーマルリーチ
+  if (lcd.phase === "FAST_SPIN") {
+    if (lcd.timer < 700) {
+      lcd.reels[0] = Math.floor(lcd.timer / 30) % 7;
+      lcd.reels[1] = Math.floor(lcd.timer / 30 + 2) % 7;
+      lcd.reels[2] = Math.floor(lcd.timer / 30 + 4) % 7;
+    } else {
+      lcd.reels[0] = cur.left; lcd.reels[1] = cur.mid; lcd.reels[2] = cur.right;
+    }
+    if (lcd.timer > 1000) nextSequence();
+  }
+  else if (lcd.phase === "NORMAL_REACH_SPIN") {
+    if (lcd.timer < 700) {
+      lcd.reels[0] = Math.floor(lcd.timer / 30) % 7;
+      lcd.reels[1] = Math.floor(lcd.timer / 30 + 2) % 7;
+      lcd.reels[2] = Math.floor(lcd.timer / 30 + 4) % 7;
+    } else if (lcd.timer < 2600) {
+      lcd.reels[0] = cur.left; lcd.reels[2] = cur.right;
+      lcd.reels[1] = Math.floor(lcd.timer / 100) % 7;
+    } else {
+      lcd.reels[0] = cur.left; lcd.reels[1] = cur.mid; lcd.reels[2] = cur.right;
+    }
+    if (lcd.timer > 3200) nextSequence();
+  }
+  // ヤモリバトルルート
+  else if (lcd.phase === "SPIN_1") {
+    lcd.reels[0] = Math.floor(lcd.timer / 50) % 7;
+    lcd.reels[1] = Math.floor(lcd.timer / 50 + 2) % 7;
+    lcd.reels[2] = Math.floor(lcd.timer / 50 + 4) % 7;
+    if (lcd.timer > 1000) {
+      lcd.phase = "NEXT_1"; lcd.timer = 0;
+      triggerShake(8, 10);
+      setStatus("【擬似連 ×2】間違っている…");
+    }
+  }
+  else if (lcd.phase === "NEXT_1") {
+    if (lcd.timer > 1300) { lcd.phase = "SPIN_2"; lcd.timer = 0; }
+  }
+  else if (lcd.phase === "SPIN_2") {
+    lcd.reels[0] = Math.floor(lcd.timer / 40) % 7;
+    lcd.reels[1] = Math.floor(lcd.timer / 40 + 1) % 7;
+    lcd.reels[2] = Math.floor(lcd.timer / 40 + 3) % 7;
+    if (lcd.timer > 1000) {
+      lcd.phase = "NEXT_2"; lcd.timer = 0;
+      triggerShake(14, 16);
+      setStatus("【擬似連 ×3 大当り確定！】");
+    }
+  }
+  else if (lcd.phase === "NEXT_2") {
+    if (lcd.timer > 1500) { lcd.phase = "BATTLE_INTRO"; lcd.timer = 0; setStatus("【VSヤモリ】カットイン突入！"); }
+  }
+  else if (lcd.phase === "BATTLE_INTRO") {
+    if (lcd.timer > 2000) { lcd.phase = "BATTLE_1"; lcd.timer = 0; setStatus("【バトル前半】「僕を喰おうとしたんだ…」"); }
+  }
+  else if (lcd.phase === "BATTLE_1") {
+    if (lcd.timer > 3200) { lcd.phase = "BATTLE_2"; lcd.timer = 0; triggerShake(16, 20); setStatus("【覚醒】「1000引く7は？」"); }
+  }
+  else if (lcd.phase === "BATTLE_2") {
+    if (lcd.timer > 3200) { lcd.phase = "PUSH_WAIT"; lcd.timer = 0; lcd.buttonPushed = false; setStatus("【当落】PUSHボタンを押せ！"); }
+  }
+  else if (lcd.phase === "PUSH_WAIT") {
+    lcd.buttonScale = 1.0 + Math.sin(lcd.timer * 0.014) * 0.12;
+    if (lcd.timer > 3500 || lcd.buttonPushed) {
+      lcd.phase = "WIN"; lcd.timer = 0;
+      win++;
+      document.getElementById("win").textContent = win;
+      triggerHandDrop(); // 決着時手落ち
+      setStatus("【大当り】FEVER 3000獲得！");
+    }
+  }
+
+  // ★ リゼ「ぷちゅん（暗転フリーズ）」ルート ★
+  else if (lcd.phase === "RIZE_START") {
+    lcd.reels[0] = Math.floor(lcd.timer / 30) % 7;
+    lcd.reels[1] = Math.floor(lcd.timer / 30 + 2) % 7;
+    lcd.reels[2] = Math.floor(lcd.timer / 30 + 4) % 7;
+    // 開始500msで「ぷちゅん！」フリーズ発生
+    if (lcd.timer > 500) {
+      lcd.phase = "RIZE_BLACKOUT"; lcd.timer = 0;
+      triggerShake(25, 12); // 強烈な衝撃
+      setStatus("【ぷちゅん！】画面フリーズ・全暗転発生！");
+    }
+  }
+  else if (lcd.phase === "RIZE_BLACKOUT") {
+    // 静寂とブラックアウト（800ms）
+    if (lcd.timer > 800) {
+      lcd.phase = "RIZE_EYE_APPEAR"; lcd.timer = 0;
+      setStatus("【神代利世 襲来】暗闇から怪しく輝く赫眼…");
+    }
+  }
+  else if (lcd.phase === "RIZE_EYE_APPEAR") {
+    // リゼの赫眼が怪しく光る（1800ms）
+    if (lcd.timer > 1800) {
+      lcd.phase = "RIZE_CUTIN"; lcd.timer = 0;
+      triggerShake(12, 15);
+      setStatus("【リゼ】「ねぇ… 私に喰われてみない？」");
+    }
+  }
+  else if (lcd.phase === "RIZE_CUTIN") {
+    // 誘惑カットイン（2200ms）後に一撃祝福手落ち！
+    if (lcd.timer > 2200) {
+      lcd.phase = "WIN"; lcd.timer = 0;
+      win++;
+      document.getElementById("win").textContent = win;
+      triggerHandDrop(); // リゼフリーズ手落ち！
+      setStatus("【リゼフリーズ達成】超大当り FEVER 3000！");
+    }
+  }
+
+  else if (lcd.phase === "WIN") {
+    if (lcd.timer > 3200) nextSequence();
+  }
+}
+
+cv.addEventListener("click", (e) => {
+  if (lcd.phase === "PUSH_WAIT") {
+    const rect = cv.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (Math.hypot(clickX - W / 2, clickY - 240) < 45) {
+      lcd.buttonPushed = true;
+    }
+  }
+});
+
+function collideLineSegment(b, p1, p2, seg) {
+  const dx = p2.x - p1.x, dy = p2.y - p1.y;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return;
+  let t = ((b.x - p1.x) * dx + (b.y - p1.y) * dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  const cx = p1.x + t * dx, cy = p1.y + t * dy;
+  const distX = b.x - cx, distY = b.y - cy;
+  const dist = Math.hypot(distX, distY);
+  if (dist < BALL_R && dist > 0) {
+    const nx = distX / dist, ny = distY / dist;
+    b.x = cx + nx * BALL_R; b.y = cy + ny * BALL_R;
+    const dot = b.vx * nx + b.vy * ny;
+    if (dot < 0) {
+      b.vx -= (1 + REST) * dot * nx;
+      b.vy -= (1 + REST) * dot * ny;
+    }
+    // 滑り台の線に乗っている間は、線の下り方向へ滑らせる（止まらせない）。
+    // 線分の向き(dx,dy)を下り向きにそろえ、接線方向に一定の力を加える。
+    if (seg && seg.slide) {
+      const segLen = Math.hypot(dx, dy) || 1;
+      let tx = dx / segLen, ty = dy / segLen;
+      if (ty < 0) { tx = -tx; ty = -ty; }   // 常に下り(y+)向きに
+      b.vx += tx * 0.32;
+      b.vy += ty * 0.32;
+    }
+  }
+}
+
+function updatePhysics() {
+  for (const b of balls) {
+    if (!b.alive) continue;
+    b.life++;
+    b.vy += GRAV; b.vx *= FRICT; b.vy *= FRICT;
+    b.x += b.vx; b.y += b.vy;
+
+    if (b.x < BALL_R + 4) { b.x = BALL_R + 4; b.vx = Math.abs(b.vx) * REST; }
+    if (b.x > W - BALL_R - 6) { b.x = W - BALL_R - 6; b.vx = -Math.abs(b.vx) * REST; }
+    if (b.y < BALL_R + 4) { b.y = BALL_R + 4; b.vy = Math.abs(b.vy) * REST; }
+
+    for (let i = 0; i < outerRail.length - 1; i++) collideLineSegment(b, outerRail[i], outerRail[i+1]);
+    for (let i = 0; i < innerRail.length - 1; i++) collideLineSegment(b, innerRail[i], innerRail[i+1]);
+    for (let i = 0; i < lcdDiamond.length; i++) collideLineSegment(b, lcdDiamond[i], lcdDiamond[(i+1)%4]);
+    // 透明な滑り台（道）。玉をヘソまで導く見えない樋
+    for (let i = 0; i < guides.length; i++) collideLineSegment(b, guides[i].a, guides[i].b, guides[i]);
+
+    if (pointInPoly(b, lcdDiamond)) {
+      // 液晶の中に球が入ったら、必ず外へ弾き出す（バグ防止）
+      const cx = W / 2, cy = 240;
+      const dx = b.x - cx, dy = b.y - cy;
+      const dist = Math.hypot(dx, dy) || 1;
+      b.x = cx + (dx / dist) * 128;
+      b.y = cy + (dy / dist) * 105;
+      b.vx = (dx / dist) * 5; b.vy = (dy / dist) * 5;
+    }
+
+    for (const p of pins) {
+      const dx = b.x - p.x, dy = b.y - p.y;
+      const dist = Math.hypot(dx, dy);
+      const minD = BALL_R + PIN_R;
+      if (dist < minD && dist > 0) {
+        const nx = dx / dist, ny = dy / dist;
+        b.x = p.x + nx * minD; b.y = p.y + ny * minD;
+        const dot = b.vx * nx + b.vy * ny;
+        b.vx -= (1 + REST) * dot * nx; b.vy -= (1 + REST) * dot * ny;
+      }
+    }
+
+    // ── ヘソの吸い込み（漏斗の補助）──
+    // 漏斗で集めた玉を、ヘソ直前で軽く中央へ寄せる程度。
+    {
+      const zx = heso.x - b.x;
+      const zy = heso.y - b.y;
+      if (zy > -6 && zy < 60 && Math.abs(zx) < 50) {
+        const pull = 0.25 * (1 - Math.abs(zx) / 50);
+        b.vx += Math.sign(zx) * pull;
+        if (Math.abs(zx) < 30 && b.vy < 2.5) b.vy += 0.06;
+      }
+    }
+
+    if (b.vy > 0 && Math.abs(b.x - heso.x) < heso.w / 2 + 4 && b.y > heso.y - heso.h / 2 && b.y < heso.y + heso.h / 2 + 8) {
+      b.alive = false;
+      onHeso();
+      continue;
+    }
+    if (b.y > H + 20 || b.life > 1400) b.alive = false;
+  }
+  for (let i = balls.length - 1; i >= 0; i--) if (!balls[i].alive) balls.splice(i, 1);
+}
+
+function draw() {
+  ctx.save();
+  ctx.clearRect(0, 0, W, H);
+
+  if (shakeTime > 0) {
+    ctx.translate((Math.random() - 0.5) * shakeIntensity, (Math.random() - 0.5) * shakeIntensity);
+  }
+
+  // レール
+  ctx.strokeStyle = "rgba(255, 30, 50, 0.75)"; ctx.lineWidth = 3;
+  ctx.beginPath();
+  for (let i = 0; i < outerRail.length; i++) (i === 0 ? ctx.moveTo : ctx.lineTo).call(ctx, outerRail[i].x, outerRail[i].y);
+  ctx.stroke();
+  ctx.beginPath();
+  for (let i = 0; i < innerRail.length; i++) (i === 0 ? ctx.moveTo : ctx.lineTo).call(ctx, innerRail[i].x, innerRail[i].y);
+  ctx.stroke();
+
+  // 液晶
+  drawLcdDisplay();
+
+  // 釘
+  for (let i = 0; i < pins.length; i++) {
+    const p = pins[i];
+    const isSpecialPin = i >= pins.length - 16;
+    ctx.fillStyle = isSpecialPin ? "#ffcc00" : "#a8abb0";
+    ctx.beginPath(); ctx.arc(p.x, p.y, PIN_R, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath(); ctx.arc(p.x - 1, p.y - 1, PIN_R * 0.45, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // ヘソ
+  ctx.fillStyle = "#e0b64a"; ctx.fillRect(heso.x - heso.w / 2, heso.y - heso.h / 2, heso.w, heso.h);
+  ctx.strokeStyle = "#ff1a30"; ctx.lineWidth = 1.5; ctx.strokeRect(heso.x - heso.w / 2, heso.y - heso.h / 2, heso.w, heso.h);
+
+  // 玉
+  for (const b of balls) {
+    const g = ctx.createRadialGradient(b.x - 2, b.y - 2, 1, b.x, b.y, BALL_R);
+    g.addColorStop(0, "#ffffff"); g.addColorStop(1, "#4f5660");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(b.x, b.y, BALL_R, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // 保留
+  const y = heso.y + 26;
+  for (let i = 0; i < 4; i++) {
+    ctx.beginPath(); ctx.arc(heso.x - 30 + i * 20, y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = i < queue.length ? "#ff3b50" : "rgba(80,50,30,0.35)"; ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawCutIn(type, title, name) {
+  const cx = W / 2, cy = 240;
+  ctx.save();
+
+  ctx.beginPath();
+  ctx.moveTo(cx - 160, cy - 90);
+  ctx.lineTo(cx + 160, cy - 60);
+  ctx.lineTo(cx + 120, cy + 70);
+  ctx.lineTo(cx - 200, cy + 40);
+  ctx.closePath();
+
+  const bgGrad = ctx.createLinearGradient(cx - 100, cy - 50, cx + 100, cy + 50);
+  if (type === "gold") {
+    bgGrad.addColorStop(0, "rgba(255, 215, 0, 0.9)");
+    bgGrad.addColorStop(0.5, "rgba(100, 20, 0, 0.95)");
+    bgGrad.addColorStop(1, "rgba(255, 180, 0, 0.9)");
+  } else {
+    bgGrad.addColorStop(0, "rgba(220, 20, 40, 0.9)");
+    bgGrad.addColorStop(0.5, "rgba(30, 0, 5, 0.95)");
+    bgGrad.addColorStop(1, "rgba(180, 0, 20, 0.9)");
+  }
+  ctx.fillStyle = bgGrad; ctx.fill();
+
+  ctx.lineWidth = type === "gold" ? 6 : 4;
+  ctx.strokeStyle = type === "gold" ? "#ffe600" : "#ff3344";
+  ctx.stroke();
+
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath(); ctx.arc(cx - 70, cy - 10, 28, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#000000";
+  ctx.beginPath(); ctx.arc(cx - 66, cy - 10, 24, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#ff1a30";
+  ctx.beginPath(); ctx.arc(cx - 62, cy - 10, 8, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = type === "gold" ? "#ffffaa" : "#ffffff";
+  ctx.font = "900 14px 'Yu Gothic', sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText(title, cx - 25, cy - 25);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "900 26px 'Yu Gothic', sans-serif";
+  ctx.shadowColor = type === "gold" ? "#ffcc00" : "#ff0000";
+  ctx.shadowBlur = 10;
+  ctx.fillText(name, cx - 25, cy + 12);
+
+  ctx.restore();
+}
+
+function drawImpactQuote(text1, text2 = "", goldMode = false) {
+  const cx = W / 2, cy = 240;
+  ctx.save();
+
+  ctx.fillStyle = "rgba(5, 0, 3, 0.82)";
+  ctx.fillRect(cx - 145, cy - 45, 290, text2 ? 90 : 60);
+  ctx.strokeStyle = goldMode ? "#ffe600" : "#ff1a30";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(cx - 145, cy - 45, 290, text2 ? 90 : 60);
+
+  const fontStyle = "900 24px 'Yu Mincho', 'Hiragino Mincho ProN', serif";
+  ctx.font = fontStyle;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  ctx.shadowColor = goldMode ? "#ffcc00" : "#ff0022";
+  ctx.shadowBlur = 14;
+
+  ctx.strokeStyle = "#000000";
+  ctx.lineWidth = 6;
+
+  if (text2) {
+    ctx.strokeText(text1, cx, cy - 15);
+    ctx.fillStyle = goldMode ? "#fff5a3" : "#ffffff";
+    ctx.fillText(text1, cx, cy - 15);
+
+    ctx.strokeText(text2, cx, cy + 22);
+    ctx.fillStyle = goldMode ? "#ffcc00" : "#ff4d60";
+    ctx.fillText(text2, cx, cy + 22);
+  } else {
+    ctx.strokeText(text1, cx, cy);
+    ctx.fillStyle = goldMode ? "#fff5a3" : "#ffffff";
+    ctx.fillText(text1, cx, cy);
+  }
+
+  ctx.restore();
+}
+
+// リゼの赫眼（かくがん）＆シルエット描画
+function drawRizeEyeGraphic(progress = 1.0) {
+  const cx = W / 2, cy = 240;
+  ctx.save();
+
+  // 背景のオーラ
+  const aura = ctx.createRadialGradient(cx, cy, 10, cx, cy, 130);
+  aura.addColorStop(0, `rgba(255, 10, 40, ${0.6 * progress})`);
+  aura.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = aura;
+  ctx.fillRect(cx - 150, cy - 100, 300, 200);
+
+  // 赤い赫眼（両目）
+  const eyeScale = Math.min(1.0, progress * 1.2);
+  [-45, 45].forEach(ox => {
+    const ex = cx + ox, ey = cy - 15;
+    // 黒目ベース
+    ctx.fillStyle = "#050002";
+    ctx.beginPath(); ctx.ellipse(ex, ey, 22 * eyeScale, 14 * eyeScale, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#800010"; ctx.lineWidth = 2; ctx.stroke();
+
+    // 赫眼の赤い輝き
+    const eyeGrad = ctx.createRadialGradient(ex, ey, 2, ex, ey, 12 * eyeScale);
+    eyeGrad.addColorStop(0, "#ffffff");
+    eyeGrad.addColorStop(0.3, "#ff1a30");
+    eyeGrad.addColorStop(1, "#80000a");
+    ctx.fillStyle = eyeGrad;
+    ctx.beginPath(); ctx.arc(ex, ey, 10 * eyeScale, 0, Math.PI * 2); ctx.fill();
+
+    // 赫子血管ライン
+    ctx.strokeStyle = "rgba(255, 30, 50, 0.8)";
+    ctx.lineWidth = 1.5;
+    for (let a = 0; a < Math.PI * 2; a += Math.PI / 3) {
+      ctx.beginPath();
+      ctx.moveTo(ex, ey);
+      ctx.lineTo(ex + Math.cos(a) * 26 * eyeScale, ey + Math.sin(a) * 18 * eyeScale);
+      ctx.stroke();
+    }
+  });
+
+  // リゼの赤いフチ眼鏡シルエット
+  ctx.strokeStyle = `rgba(255, 30, 60, ${0.9 * progress})`;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(cx - 72, cy - 30, 54, 28);
+  ctx.strokeRect(cx + 18, cy - 30, 54, 28);
+  ctx.beginPath(); ctx.moveTo(cx - 18, cy - 18); ctx.lineTo(cx + 18, cy - 18); ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawLcdDisplay() {
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(lcdDiamond[0].x, lcdDiamond[0].y);
+  ctx.lineTo(lcdDiamond[1].x, lcdDiamond[1].y);
+  ctx.lineTo(lcdDiamond[2].x, lcdDiamond[2].y);
+  ctx.lineTo(lcdDiamond[3].x, lcdDiamond[3].y);
+  ctx.closePath();
+  ctx.clip();
+
+  const cx = W / 2, cy = 240;
+  const t = lcd.timer;
+
+  const bg = ctx.createLinearGradient(0, 200, 0, 410);
+  if (lcd.phase.startsWith("NEXT")) {
+    bg.addColorStop(0, "#800511"); bg.addColorStop(1, "#120205");
+  } else if (lcd.phase.startsWith("BATTLE")) {
+    bg.addColorStop(0, "#2b0209"); bg.addColorStop(1, "#050002");
+  } else if (lcd.phase.startsWith("RIZE")) {
+    bg.addColorStop(0, "#000000"); bg.addColorStop(1, "#050002"); // 漆黒
+  } else if (lcd.phase === "WIN") {
+    bg.addColorStop(0, "#d91428"); bg.addColorStop(1, "#ffe047");
+  } else {
+    bg.addColorStop(0, "#1d070b"); bg.addColorStop(1, "#070204");
+  }
+  ctx.fillStyle = bg; ctx.fillRect(0, 200, W, 212);
+
+  // 演出進行
+  if (lcd.phase === "NEXT_1") {
+    drawCutIn("red", "擬似連 ×2", "金木 研");
+    drawImpactQuote("「間違っている…」");
+  }
+  else if (lcd.phase === "NEXT_2") {
+    drawCutIn("gold", "擬似連 ×3 【大当り濃厚】", "カネキ 覚醒");
+    drawImpactQuote("「僕に喰われても」", "「仕方ないよね？」", true);
+  }
+  else if (lcd.phase === "BATTLE_INTRO") {
+    drawCutIn("gold", "Sレート喰種", "VS ヤモリ");
+    ctx.fillStyle = "#ffcc00"; ctx.font = "900 16px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("バトルSPリーチ発展（大当り確定）", cx, cy + 55);
+  }
+  else if (lcd.phase === "BATTLE_1") {
+    ctx.strokeStyle = "#ff1a30"; ctx.lineWidth = 10;
+    ctx.beginPath(); ctx.moveTo(cx - 130, cy + 30); ctx.quadraticCurveTo(cx - 30, cy - 20, cx, cy); ctx.stroke();
+    ctx.strokeStyle = "#9933ff"; ctx.lineWidth = 12;
+    ctx.beginPath(); ctx.moveTo(cx + 130, cy - 30); ctx.quadraticCurveTo(cx + 30, cy + 20, cx, cy); ctx.stroke();
+
+    drawImpactQuote("「僕を喰おうとしたんだ…」", "「喰われても仕方ないよね？」");
+  }
+  else if (lcd.phase === "BATTLE_2") {
+    if (Math.floor(t / 100) % 2 === 0) {
+      ctx.fillStyle = "rgba(255,255,255,0.15)";
+      ctx.fillRect(0, 200, W, 212);
+    }
+    drawCutIn("gold", "金木研 覚醒", "カネキ 覚醒");
+    drawImpactQuote("「1000引く7は…？」", "", true);
+  }
+  else if (lcd.phase === "PUSH_WAIT") {
+    ctx.fillStyle = "#ffe600";
+    ctx.font = "900 24px 'Yu Mincho', serif";
+    ctx.textAlign = "center";
+    ctx.shadowColor = "#ff0000"; ctx.shadowBlur = 10;
+    ctx.fillText("【 撃 破 せ よ ！ 】", cx, cy - 58);
+
+    ctx.save();
+    ctx.translate(cx, cy + 10);
+    ctx.scale(lcd.buttonScale, lcd.buttonScale);
+    ctx.fillStyle = "#ff1a30"; ctx.beginPath(); ctx.arc(0, 0, 44, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#ffe047"; ctx.lineWidth = 4; ctx.stroke();
+    ctx.fillStyle = "#ffffff"; ctx.font = "900 18px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("PUSH!", 0, 0);
+    ctx.restore();
+  }
+
+  // ★ リゼ「ぷちゅん」演出描画 ★
+  else if (lcd.phase === "RIZE_BLACKOUT") {
+    // 画面一瞬フラッシュ後にブラックアウト
+    if (t < 80) {
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 200, W, 212);
+    } else {
+      ctx.fillStyle = "#000000"; ctx.fillRect(0, 200, W, 212);
+    }
+  }
+  else if (lcd.phase === "RIZE_EYE_APPEAR") {
+    ctx.fillStyle = "#000000"; ctx.fillRect(0, 200, W, 212);
+    drawRizeEyeGraphic(Math.min(1.0, t / 1200));
+  }
+  else if (lcd.phase === "RIZE_CUTIN") {
+    drawRizeEyeGraphic(1.0);
+    drawCutIn("gold", "大惨劇の襲来", "神代 利世");
+    drawImpactQuote("「ねぇ…」", "「私に喰われてみない？」", true);
+  }
+
+  else if (lcd.phase === "WIN") {
+    ctx.fillStyle = "#ffe047"; ctx.font = "900 36px sans-serif"; ctx.textAlign = "center";
+    ctx.shadowColor = "#ff0022"; ctx.shadowBlur = 15;
+    ctx.fillText("超 大 当 り", cx, cy - 10);
+    ctx.fillStyle = "#ffffff"; ctx.font = "bold 16px sans-serif";
+    ctx.fillText("FEVER 3000獲得", cx, cy + 30);
+  }
+  else {
+    // 各リールが回転中か（前フレームと値が違えば回転中とみなす）
+    if (!lcd._prevReels) lcd._prevReels = [-1, -1, -1];
+    lcd.spinningReel = [
+      lcd.reels[0] !== lcd._prevReels[0],
+      lcd.reels[1] !== lcd._prevReels[1],
+      lcd.reels[2] !== lcd._prevReels[2]
+    ];
+    lcd._prevReels = [lcd.reels[0], lcd.reels[1], lcd.reels[2]];
+
+    // 背景にうっすら喰種の赫子模様（動く）
+    ctx.save();
+    ctx.globalAlpha = 0.12;
+    ctx.strokeStyle = "#ff2a44";
+    ctx.lineWidth = 2;
+    for (let k = 0; k < 4; k++) {
+      const ph = t / 600 + k * 1.6;
+      ctx.beginPath();
+      ctx.moveTo(cx - 120, cy - 30 + k * 20);
+      ctx.quadraticCurveTo(cx + Math.sin(ph) * 60, cy - 60 + k * 20, cx + 120, cy - 30 + k * 20);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // リーチ判定（左右が揃っている）
+    const isReach = (lcd.reels[0] === lcd.reels[2]);
+
+    const slotW = 74;
+    for (let i = 0; i < 3; i++) {
+      const sx = cx + (i - 1) * slotW;
+      const spinning = lcd.spinningReel && lcd.spinningReel[i];
+
+      // 図柄の背板（グラデーション＋光沢）
+      const fg = ctx.createLinearGradient(sx, cy - 44, sx, cy + 44);
+      fg.addColorStop(0, "#2a0810");
+      fg.addColorStop(0.5, "#12040a");
+      fg.addColorStop(1, "#2a0810");
+      ctx.fillStyle = fg;
+      roundRect(ctx, sx - 30, cy - 44, 60, 88, 6);
+      ctx.fill();
+
+      // 枠（中リールがリーチ中は金、それ以外は赤）
+      const frameHot = (isReach && i === 1);
+      ctx.strokeStyle = frameHot ? "#ffcc00" : "#ff2a44";
+      ctx.lineWidth = frameHot ? 3 : 1.8;
+      if (frameHot) { ctx.shadowColor = "#ffcc00"; ctx.shadowBlur = 12; }
+      roundRect(ctx, sx - 30, cy - 44, 60, 88, 6);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // 上下のグラデ（回転中は流れているように見せる）
+      if (spinning) {
+        ctx.save();
+        ctx.beginPath(); roundRect(ctx, sx - 30, cy - 44, 60, 88, 6); ctx.clip();
+        const off = (t * 0.6) % 44;
+        ctx.globalAlpha = 0.5;
+        for (let j = -2; j < 4; j++) {
+          const yy = cy - 44 + j * 44 + off;
+          ctx.fillStyle = "#ffb0b8";
+          ctx.font = "bold 34px 'Arial Black', sans-serif";
+          ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText(SYMBOLS[(lcd.reels[i] + j + 14) % 7], sx, yy);
+        }
+        ctx.restore();
+      } else {
+        // 停止：発光する数字
+        ctx.save();
+        ctx.shadowColor = frameHot ? "#ffcc00" : "#ff3050";
+        ctx.shadowBlur = 10;
+        const numGrad = ctx.createLinearGradient(sx, cy - 26, sx, cy + 26);
+        numGrad.addColorStop(0, "#ffffff");
+        numGrad.addColorStop(0.5, "#ffd0d6");
+        numGrad.addColorStop(1, "#ff6a7a");
+        ctx.fillStyle = numGrad;
+        ctx.font = "900 46px 'Arial Black', sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(SYMBOLS[lcd.reels[i]], sx, cy + 2);
+        ctx.restore();
+      }
+    }
+
+    // リーチ中は「リーチ！」テロップ
+    if (isReach && lcd.spinningReel && lcd.spinningReel[1]) {
+      ctx.save();
+      ctx.fillStyle = "#ffcc00";
+      ctx.font = "900 22px 'Yu Mincho', serif";
+      ctx.textAlign = "center";
+      ctx.shadowColor = "#ff0000"; ctx.shadowBlur = 12;
+      const wob = Math.sin(t / 80) * 3;
+      ctx.fillText("リーチ！", cx, cy - 58 + wob);
+      ctx.restore();
+    }
+  }
+
+  ctx.restore();
+
+  ctx.strokeStyle = "#7a1624"; ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.moveTo(lcdDiamond[0].x, lcdDiamond[0].y);
+  ctx.lineTo(lcdDiamond[1].x, lcdDiamond[1].y);
+  ctx.lineTo(lcdDiamond[2].x, lcdDiamond[2].y);
+  ctx.lineTo(lcdDiamond[3].x, lcdDiamond[3].y);
+  ctx.closePath(); ctx.stroke();
+  ctx.strokeStyle = "#e0b64a"; ctx.lineWidth = 2; ctx.stroke();
+}
+
+let lastTime = 0;
+function loop(time = 0) {
+  let dt = time - lastTime;
+  lastTime = time;
+  if (dt > 100) dt = 16;
+
+  for (let i = 0; i < 2; i++) updatePhysics();
+  updateLcd(dt);
+  if (shakeTime > 0) shakeTime--;
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+let holding = false;
+const btnLaunch = document.getElementById("btnLaunch");
+
+function startLaunch(e) { if (e) e.preventDefault(); if (!holding) { holding = true; launch(); } }
+function stopLaunch() { holding = false; }
+
+btnLaunch.addEventListener("mousedown", startLaunch);
+btnLaunch.addEventListener("mouseup", stopLaunch);
+btnLaunch.addEventListener("mouseleave", stopLaunch);
+btnLaunch.addEventListener("touchstart", startLaunch, { passive: false });
+btnLaunch.addEventListener("touchend", stopLaunch);
+btnLaunch.addEventListener("touchcancel", stopLaunch);
+
+document.addEventListener("keydown", e => { if (e.code === "Space" && !e.repeat && !holding) { holding = true; launch(); } });
+document.addEventListener("keyup", e => { if (e.code === "Space") stopLaunch(); });
+
+// 発射ペースを1.5倍速に（1発あたり約0.4秒）
+setInterval(() => { if (holding) launch(); }, 400);
+</script>
+</body>
+</html>
