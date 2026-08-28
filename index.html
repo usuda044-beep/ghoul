@@ -124,11 +124,11 @@
   }
   .hand-gimmick.idle {
     transform: translate(110px, -45px) rotate(-18deg) scale(0.65);
-    transition: transform 1.2s cubic-bezier(0.25, 1, 0.5, 1);
+    transition: transform 3s cubic-bezier(0.25, 0.8, 0.4, 1);
   }
   .hand-gimmick.drop {
     transform: translate(-35px, 125px) rotate(12deg) scale(1.15);
-    transition: transform 0.12s cubic-bezier(0.05, 0.9, 0.1, 1.2);
+    transition: transform 0.8s cubic-bezier(0.34, 1.15, 0.64, 1);
     filter: drop-shadow(0 0 30px rgba(255, 20, 50, 0.95));
   }
 
@@ -632,14 +632,19 @@ function setStatus(txt) {
 }
 
 // 喰MAXハンド落下アクション
+let handActive = false;
 function triggerHandDrop() {
   handEl.classList.remove("idle");
   handEl.classList.add("drop");
   triggerShake(22, 28);
+  handActive = true;                 // 手落ち中は液晶に金木を映す
+  // しばらく見せてから戻す（戻りは3秒かけてゆっくり）
   setTimeout(() => {
     handEl.classList.remove("drop");
     handEl.classList.add("idle");
-  }, 1200);
+  }, 1600);
+  // 戻りきる（3秒）まで金木を表示し続ける
+  setTimeout(() => { handActive = false; }, 1600 + 3000);
 }
 
 // ヘソ入賞時抽選（1/10で大当り：ヤモリバトル手落ち 50% / リゼぷちゅん 50%）
@@ -652,15 +657,10 @@ function onHeso() {
     let pattern = "FAST_MISS";
 
     if (isWin) {
-      // 大当り時は半々で2パターンのプレミア演出へ発展
-      if (Math.random() < 0.5) {
-        pattern = "SP_BATTLE";
-        triggerHandDrop(); // 入賞時手落ち（先バレ）
-        setStatus("【先手落ち発生！】ヤモリバトル（確確）保留が入賞！");
-      } else {
-        pattern = "RIZE_FREEZE"; // 変動中突然ぷちゅん（画面暗転）
-        setStatus("【保留獲得】違和感保留（リゼの気配…）");
-      }
+      // 大当りは必ず入賞時に手落ち（先バレ）を出す
+      triggerHandDrop();
+      pattern = "SP_BATTLE";
+      setStatus("【先手落ち発生！】ヤモリバトル（確確）保留が入賞！");
     } else {
       pattern = Math.random() < 0.85 ? "FAST_MISS" : "NORMAL_REACH";
     }
@@ -720,27 +720,27 @@ function updateLcd(dt) {
 
   // 通常・ノーマルリーチ
   if (lcd.phase === "FAST_SPIN") {
-    if (lcd.timer < 700) {
+    if (lcd.timer < 1400) {
       lcd.reels[0] = Math.floor(lcd.timer / 30) % 7;
       lcd.reels[1] = Math.floor(lcd.timer / 30 + 2) % 7;
       lcd.reels[2] = Math.floor(lcd.timer / 30 + 4) % 7;
     } else {
       lcd.reels[0] = cur.left; lcd.reels[1] = cur.mid; lcd.reels[2] = cur.right;
     }
-    if (lcd.timer > 1000) nextSequence();
+    if (lcd.timer > 2200) nextSequence();
   }
   else if (lcd.phase === "NORMAL_REACH_SPIN") {
-    if (lcd.timer < 700) {
+    if (lcd.timer < 1200) {
       lcd.reels[0] = Math.floor(lcd.timer / 30) % 7;
       lcd.reels[1] = Math.floor(lcd.timer / 30 + 2) % 7;
       lcd.reels[2] = Math.floor(lcd.timer / 30 + 4) % 7;
-    } else if (lcd.timer < 2600) {
+    } else if (lcd.timer < 4200) {
       lcd.reels[0] = cur.left; lcd.reels[2] = cur.right;
       lcd.reels[1] = Math.floor(lcd.timer / 100) % 7;
     } else {
       lcd.reels[0] = cur.left; lcd.reels[1] = cur.mid; lcd.reels[2] = cur.right;
     }
-    if (lcd.timer > 3200) nextSequence();
+    if (lcd.timer > 5000) nextSequence();
   }
   // ヤモリバトルルート
   else if (lcd.phase === "SPIN_1") {
@@ -911,15 +911,16 @@ function updatePhysics() {
       }
     }
 
-    // ── ヘソの吸い込み（漏斗の補助）──
-    // 漏斗で集めた玉を、ヘソ直前で軽く中央へ寄せる程度。
+    // ── ヘソの吸い込み（広範囲。左下へこぼれる球も拾う）──
     {
       const zx = heso.x - b.x;
       const zy = heso.y - b.y;
-      if (zy > -6 && zy < 60 && Math.abs(zx) < 50) {
-        const pull = 0.25 * (1 - Math.abs(zx) / 50);
+      // ヘソの上方＆やや下まで、横に広く効かせる
+      if (zy > -40 && zy < 140 && Math.abs(zx) < 150) {
+        const pull = 0.9 * (1 - Math.abs(zx) / 150);
         b.vx += Math.sign(zx) * pull;
-        if (Math.abs(zx) < 30 && b.vy < 2.5) b.vy += 0.06;
+        // ヘソ付近では落下方向にも引く
+        if (Math.abs(zx) < 60 && b.vy < 3) b.vy += 0.12;
       }
     }
 
@@ -1120,6 +1121,77 @@ function drawRizeEyeGraphic(progress = 1.0) {
   ctx.restore();
 }
 
+// 液晶に映す金木の顔（白髪・隻眼・赫眼が赤く光る）
+function drawKanekiOnLcd(cx, cy, t) {
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  const fy = cy + 6;
+
+  // 白髪（とげとげ）
+  ctx.fillStyle = "rgba(235,232,228,0.9)";
+  ctx.beginPath();
+  ctx.moveTo(cx - 42, fy - 18);
+  const spikes = [[-38,-46],[-26,-30],[-20,-54],[-8,-34],[0,-60],[8,-34],[20,-54],[26,-30],[38,-46],[42,-18]];
+  for (const [dx,dy] of spikes) ctx.lineTo(cx + dx, fy + dy);
+  ctx.quadraticCurveTo(cx, fy - 30, cx - 42, fy - 18);
+  ctx.closePath();
+  ctx.fill();
+
+  // 顔の輪郭
+  ctx.fillStyle = "rgba(225,216,208,0.85)";
+  ctx.beginPath();
+  ctx.moveTo(cx - 36, fy - 20);
+  ctx.quadraticCurveTo(cx - 40, fy + 30, cx, fy + 52);
+  ctx.quadraticCurveTo(cx + 40, fy + 30, cx + 36, fy - 20);
+  ctx.quadraticCurveTo(cx, fy - 34, cx - 36, fy - 20);
+  ctx.closePath();
+  ctx.fill();
+
+  // 左目（人間の目・虚ろ）
+  ctx.fillStyle = "rgba(40,30,30,0.9)";
+  ctx.beginPath(); ctx.ellipse(cx - 15, fy, 6, 4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#3a2a26";
+  ctx.beginPath(); ctx.arc(cx - 15, fy, 2.5, 0, Math.PI * 2); ctx.fill();
+
+  // 右目（赫眼・赤く光る。脈打つ）
+  const glow = 0.6 + 0.4 * Math.sin(t / 250);
+  ctx.save();
+  ctx.shadowColor = "rgba(255,20,45," + glow + ")";
+  ctx.shadowBlur = 18;
+  ctx.fillStyle = "#0a0206";
+  ctx.beginPath(); ctx.ellipse(cx + 15, fy, 8, 7, 0, 0, Math.PI * 2); ctx.fill();
+  const eg = ctx.createRadialGradient(cx + 15, fy, 1, cx + 15, fy, 8);
+  eg.addColorStop(0, "#ffffff");
+  eg.addColorStop(0.3, "#ff3050");
+  eg.addColorStop(0.7, "#c8102a");
+  eg.addColorStop(1, "#3a0008");
+  ctx.fillStyle = eg;
+  ctx.beginPath(); ctx.arc(cx + 15, fy, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#1a0004";
+  ctx.beginPath(); ctx.arc(cx + 15, fy, 2, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // 赫眼の下に伸びる赤い血管の筋
+  ctx.strokeStyle = "rgba(200,16,42," + glow + ")";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(cx + 15, fy + 7);
+  ctx.quadraticCurveTo(cx + 18, fy + 22, cx + 15, fy + 36);
+  ctx.moveTo(cx + 15, fy + 7);
+  ctx.quadraticCurveTo(cx + 11, fy + 20, cx + 8, fy + 30);
+  ctx.stroke();
+
+  // 口（真一文字・無表情）
+  ctx.strokeStyle = "rgba(120,100,95,0.8)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(cx - 10, fy + 30);
+  ctx.quadraticCurveTo(cx, fy + 33, cx + 10, fy + 30);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
 function drawLcdDisplay() {
   ctx.save();
   ctx.beginPath();
@@ -1146,6 +1218,11 @@ function drawLcdDisplay() {
     bg.addColorStop(0, "#1d070b"); bg.addColorStop(1, "#070204");
   }
   ctx.fillStyle = bg; ctx.fillRect(0, 200, W, 212);
+
+  // 液晶の中に金木の顔を映す（待機中・通常変動・リーチ中、および手落ち中に浮かぶ）
+  if (handActive || lcd.phase === "IDLE" || lcd.phase === "FAST_SPIN" || lcd.phase === "NORMAL_REACH_SPIN") {
+    drawKanekiOnLcd(cx, cy, t);
+  }
 
   // 演出進行
   if (lcd.phase === "NEXT_1") {
